@@ -1,0 +1,327 @@
+//motor2
+int enA = 10;
+int in1 = 9;
+int in2 = 8;
+
+// motor two
+int enB = 5;
+int in3 = 7;
+int in4 = 6;
+
+// Wave Front Variables
+int nothing=0;
+int wall=255;
+int goal=1;
+int robot=254;
+
+//starting robot/goal locations
+int robot_x=5;
+int robot_y=3;
+int goal_x=1;
+int goal_y=3;
+int cell_size=330;//the size of the robot
+int scan_one_cell=39;//lower number makes it see further
+
+//map locations
+int x=0;
+int y=0;
+
+//temp variables
+int counter=0;
+
+//when searching for a node with a lower value
+int minimum_node=250;
+int min_node_location=0;
+int reset_min=250;//anything above this number is a special item, ie a wall or robot
+
+//X is vertical, Y is horizontal
+int maps[6][6]=  {{0,0,0,0,0,0},
+         {0,0,0,0,0,0},
+         {0,0,0,0,0,0},
+         {0,0,0,0,0,0},
+         {0,0,0,0,0,0},
+         {0,0,0,0,0,0}};
+
+void setup()
+{
+  // set all the motor control pins to outputs
+  pinMode(enA, OUTPUT);
+  pinMode(enB, OUTPUT);
+  pinMode(in1, OUTPUT);
+  pinMode(in2, OUTPUT);
+  pinMode(in3, OUTPUT);
+  pinMode(in4, OUTPUT);
+}
+
+void loop()
+{
+  delay(3000);
+
+  right();
+
+  digitalWrite(in1,LOW);
+  digitalWrite(in2,LOW);
+  digitalWrite(in3,LOW);
+  digitalWrite(in4,LOW);
+  delay(5000);
+
+      find_walls();
+    new_state=propagate_wavefront(robot_x,robot_y,goal_x,goal_y);
+
+    //////////////wavefront code//////////////
+    if(new_state!=old_state && new_state!=0)
+      {
+      //if not pointed in the right direction, rotate
+      if (abs(old_state - new_state) == 2)//rotate 180 degrees
+        left();
+        left();
+      else if ((signed int)(old_state - new_state) == -1 || (signed int)(old_state - new_state) == 3)//rotate 90 degrees CW
+        right();
+      else if ((signed int)(old_state - new_state) == 1 || (signed int)(old_state - new_state) == -3)//rotate 90 degrees CCW
+        left();
+      
+    
+      //make new state the old state
+      old_state=new_state;
+      //recheck with new location
+      find_walls();
+      //find new location to go to
+      new_state=propagate_wavefront(robot_x,robot_y,goal_x,goal_y);
+      
+      }
+
+    //there is no solution
+    if (new_state==0)
+      {
+        //play error song
+        //reset the entire map
+        clear_map();
+      }
+
+    //go to new location
+    else//move if there is a solution, otherwise dont move forward
+      {
+      straight(cell_size,100);//distance, velocity
+      
+      //update new location of robot
+      if (new_state==1)
+        robot_x--;
+      if (new_state==2)
+        robot_y++;
+      if (new_state==3)
+        robot_x++;
+      if (new_state==4)
+        robot_y--;
+      }
+
+    //make new state the old state
+    if(new_state!=0)
+      old_state=new_state;
+
+
+  
+}
+
+int propagate_wavefront(int robot_x, int robot_y, int goal_x, int goal_y)
+  {
+  //clear old wavefront
+  unpropagate(robot_x, robot_y);
+  
+  counter=0;//reset the counter for each run!
+    while(counter<50)//allows for recycling until robot is found
+        {
+        x=0;
+        y=0;
+      while(x<6 && y<6)//while the map hasnt been fully scanned
+        {
+        //if this location is a wall or the goal, just ignore it
+        if (maps[x][y] != wall && maps[x][y] != goal)
+          { 
+          //a full trail to the robot has been located, finished!
+          if (min_surrounding_node_value(x, y) < reset_min && maps[x][y]==robot)
+            {
+            //finshed! tell robot to start moving down path
+            return min_node_location;
+            }
+          //record a value in to this node
+          else if (minimum_node!=reset_min)//if this isnt here, 'nothing' will go in the location
+            maps[x][y]=minimum_node+1;
+          }
+        
+        //go to next node and/or row
+        y++;
+        if (y==6 && x!=6)
+          {
+          x++;
+          y=0;
+          }
+        }
+      counter++;
+        }
+    return 0;
+  }
+
+void unpropagate(int robot_x, int robot_y)//clears old path to determine new path
+  {
+  //stay within boundary
+  for(x=0; x<6; x++)
+    for(y=0; y<6; y++)
+      if (maps[x][y] != wall && maps[x][y] != goal) //if this location is something, just ignore it
+        maps[x][y] = nothing;//clear that space
+  
+  //store robot location in map
+  maps[robot_x][robot_y]=robot;
+  //store robot location in map
+  maps[goal_x][goal_y]=goal;
+  }
+
+//if no solution is found, delete all walls from map
+void clear_map(void)
+  { 
+  for(x=0;x<6;x++)
+    for(y=0;y<6;y++)
+      if (maps[x][y] != robot && maps[x][y] != goal)
+        maps[x][y]=nothing;
+  }
+
+//this function looks at a node and returns the lowest value around that node
+//1 is up, 2 is right, 3 is down, and 4 is left (clockwise)
+int min_surrounding_node_value(int x, int y)
+  {
+  minimum_node=reset_min;//reset minimum
+
+  //down
+  if(x < 5)//not out of boundary
+    if  (maps[x+1][y] < minimum_node && maps[x+1][y] != nothing)//find the lowest number node, and exclude empty nodes (0's)
+        {
+      minimum_node = maps[x+1][y];
+      min_node_location=3;
+            }
+
+  //up
+  if(x > 0)
+    if  (maps[x-1][y] < minimum_node && map[x-1][y] != nothing)
+        {
+      minimum_node = maps[x-1][y];
+      min_node_location=1;
+            }
+  
+  //right
+  if(y < 5)
+    if  (maps[x][y+1] < minimum_node && maps[x][y+1] != nothing)
+        {
+      minimum_node = maps[x][y+1];
+      min_node_location=2;
+            }
+            
+  //left
+  if(y > 0)
+    if  (maps[x][y-1] < minimum_node && maps[x][y-1] != nothing)
+        {
+      minimum_node = maps[x][y-1];
+      min_node_location=4;
+            }
+     
+  return minimum_node;
+}
+
+void find_walls(void)
+  {
+  //do not scan outside the border region
+  if((old_state==1 && robot_x==0) || (old_state==2 && robot_y==5) || (old_state==3 && robot_x==5) || (old_state==4 && robot_y==0))
+    return;
+  
+  else
+    {
+    scan_angle=660;
+
+    //reset scanner
+    servo_scan(scan_angle);
+    delayMs(40);
+    servo_scan(scan_angle);
+    delayMs(40);
+    servo_scan(scan_angle);
+    delayMs(40);
+
+    object_found=0;
+
+    //do a full scan until something is sensed in the way
+    while(scan_angle < 942 && object_found==0)
+      {
+      if (distanceSensor < scan_one_cell)//object found: add it to the map
+        {
+        //account for angle of the robot wrt the map, and stay in boundaries
+        if (old_state==1)// && robot_x>0)
+          map[robot_x-1][robot_y]=wall;
+        else if (old_state==2)// && robot_y<5)
+          map[robot_x][robot_y+1]=wall;
+        else if (old_state==3)// && robot_x<5)
+          map[robot_x+1][robot_y]=wall;
+        else if (old_state==4)// && robot_y>0)
+          map[robot_x][robot_y-1]=wall;
+        object_found=1;
+        }
+
+      //servo scan code
+      //-90 degrees at 300, lower goes CCW, 750 is centered, 1200 is far CW
+      servo_scan(scan_angle);
+      delayMs(12);
+      scan_angle++;
+      }
+      
+    if(object_found==0) //no object found, so clear it in the map
+      {
+      //account for angle of the robot wrt the map, and stay in boundaries
+      if (old_state==1)// && robot_x>0)
+        map[robot_x-1][robot_y]=nothing;
+      else if (old_state==2)// && robot_y<5)
+        map[robot_x][robot_y+1]=nothing;
+      else if (old_state==3)// && robot_x<5)
+        map[robot_x+1][robot_y]=nothing;
+      else if (old_state==4)// && robot_y>0)
+        map[robot_x][robot_y-1]=nothing;
+      }
+    }
+  //makes sure robot/goal location isnt replaced with a wall
+  //store robot location in map
+  map[robot_x][robot_y]=robot;
+  //store robot location in map
+  map[goal_x][goal_y]=goal;
+}
+
+void right(){
+analogWrite(enA,255);
+digitalWrite(in1,HIGH);
+digitalWrite(in2,LOW);
+analogWrite(enB,255);
+digitalWrite(in3,LOW);
+digitalWrite(in4,HIGH);
+delay(1600);
+}
+void left(){
+analogWrite(enA,255);
+digitalWrite(in1,LOW);
+digitalWrite(in2,HIGH);
+analogWrite(enB,255);
+digitalWrite(in3,HIGH);
+digitalWrite(in4,LOW);
+delay(1600);
+}
+void forward(){
+analogWrite(enA,255);
+digitalWrite(in1,HIGH);
+digitalWrite(in2,LOW);
+analogWrite(enB,255);
+digitalWrite(in3,HIGH);
+digitalWrite(in4,LOW);
+delay(975);
+}
+void reverse(){
+analogWrite(enA,255);
+digitalWrite(in1,LOW);
+digitalWrite(in2,HIGH);
+analogWrite(enB,255);
+digitalWrite(in3,LOW);
+digitalWrite(in4,HIGH);
+delay(766);
+}
